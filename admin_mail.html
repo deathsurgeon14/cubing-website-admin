@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Mail Console (FKS Cubing Open 2026)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Supabase JS Client for seamless OAuth handling -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --ink: #12172B;
+    --paper: #F6F4EF;
+    --paper-dim: #EAE7DD;
+    --cube-red: #E6402A;
+    --cube-green: #1E8E5A;
+    --cube-amber: #B7791F;
+    --line: #D9D5C8;
+    --text-dim: #6B7280;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  a { color: inherit; text-decoration: none; }
+
+  /* NAVIGATION BAR (Matches login.html) */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(246,244,239,0.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav-inner {
+    max-width: 1150px; margin: 0 auto; padding: 16px 20px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  }
+  .logo { 
+    display: flex; align-items: center; gap: 10px; 
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 18px; letter-spacing: -0.01em; 
+  }
+  .logo-mark {
+    width: 32px; height: 32px; background: var(--cube-red); border-radius: 6px;
+    display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 700;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .nav-links { display: flex; align-items: center; gap: 24px; font-size: 14px; font-weight: 500; }
+  .nav-links .active { position: relative; font-weight: 600; }
+  .nav-links .active::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -20px; height: 2px; background: var(--ink);
+  }
+  .nav-cta { display: flex; gap: 10px; align-items: center; }
+
+  /* BUTTON STYLES */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 8px 16px; border-radius: 999px; font-weight: 600; font-size: 13px;
+    border: 1px solid transparent; cursor: pointer; transition: all .15s ease;
+    font-family: 'IBM Plex Mono', monospace; text-decoration: none;
+  }
+  .btn:hover:not(:disabled) { transform: translateY(-1px); opacity: 0.9; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: var(--ink); color: var(--paper); }
+  .btn-primary:hover { box-shadow: 0 4px 12px rgba(18,23,43,0.25); }
+  .btn-solid-red { background: var(--cube-red); color: #fff; }
+  .btn-solid-red:hover { box-shadow: 0 4px 12px rgba(230,64,42,0.3); }
+  .btn-green { background: var(--cube-green); color: #fff; }
+  .btn-amber { background: var(--cube-amber); color: #fff; }
+  .btn-outline { border-color: var(--line); background: #fff; color: var(--ink); }
+  .btn-outline:hover { border-color: var(--ink); }
+  .btn-sm { padding: 4px 10px; font-size: 11px; border-radius: 6px; }
+
+  /* PAGE WRAPPER */
+  .wrap { max-width: 1150px; margin: 30px auto; padding: 0 20px; width: 100%; flex: 1; }
+  header { margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  h1 { font-family: 'Space Grotesk', sans-serif; font-size: 26px; }
+  .back-link { color: var(--text-dim); text-decoration: none; font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+  .back-link:hover { color: var(--ink); }
+
+  /* DIAGNOSTICS CARD */
+  .diag {
+    border-radius: 14px; padding: 14px 16px; margin-bottom: 16px;
+    border: 1px solid var(--line); background: #fff;
+    font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; line-height: 1.7;
+  }
+  .diag.ok    { border-color: rgba(30,142,90,0.45);  background: rgba(30,142,90,0.06); }
+  .diag.warn  { border-color: rgba(183,121,31,0.45); background: rgba(183,121,31,0.07); }
+  .diag.fail  { border-color: rgba(230,64,42,0.45);  background: rgba(230,64,42,0.07); }
+  .diag-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; cursor: pointer; }
+  .diag-title { font-family: 'Space Grotesk', sans-serif; font-size: 14px; }
+  .diag-body { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 10px; }
+  .diag-body[hidden] { display: none; }
+  .diag-row { display: flex; gap: 10px; }
+  .diag-k { color: var(--text-dim); min-width: 190px; flex-shrink: 0; }
+  .diag-v { word-break: break-word; }
+
+  /* SUMMARY CARD */
+  .summary-card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 20px; }
+  .summary-title { font-family: 'Space Grotesk', sans-serif; font-size: 16px; margin-bottom: 12px; }
+  .totals-row { display: flex; gap: 32px; margin-bottom: 16px; flex-wrap: wrap; }
+  .total-stat-box { display: flex; flex-direction: column; }
+  .total-stat-label { font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px; }
+  .total-stat-count { font-family: 'Space Grotesk', sans-serif; font-size: 26px; color: var(--ink); }
+  .total-stat-unread { font-family: 'Space Grotesk', sans-serif; font-size: 26px; color: var(--cube-red); }
+  .total-stat-storage { font-family: 'Space Grotesk', sans-serif; font-size: 26px; color: var(--cube-green); }
+
+  /* FILTER CARD */
+  .filter-card {
+    background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 20px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; align-items: end;
+  }
+  .filter-group { display: flex; flex-direction: column; gap: 6px; }
+  .filter-group label { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--text-dim); }
+  .filter-control {
+    width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--paper);
+    font-family: 'Inter', sans-serif; font-size: 13.5px; color: var(--ink); outline: none; transition: border-color .15s;
+  }
+  .filter-control:focus { border-color: var(--ink); }
+
+  /* ACTIONS BAR */
+  .actions-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
+  .actions-left { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+  /* RESULT BAR */
+  .result-bar {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+    background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; margin-bottom: 16px;
+  }
+  .result-count { font-family: 'Space Grotesk', sans-serif; font-size: 18px; }
+  .result-count b { font-size: 22px; }
+  .result-meta { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--text-dim); }
+  .result-meta .read { color: var(--cube-green); font-weight: 600; }
+  .result-meta .unread { color: var(--cube-red); font-weight: 600; }
+
+  /* TABLE CARD */
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 20px; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; color: var(--text-dim);
+    padding: 10px; border-bottom: 1px solid var(--line); background: var(--paper-dim); text-align: left;
+  }
+  td { padding: 12px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tr.unread-row td { background: rgba(230,64,42,0.03); }
+
+  /* BADGES & SUBTEXT */
+  .badge { display: inline-block; padding: 3px 8px; border-radius: 999px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; }
+  .badge-read { background: rgba(30,142,90,0.15); color: var(--cube-green); }
+  .badge-unread { background: rgba(230,64,42,0.15); color: var(--cube-red); }
+  .badge-folder { background: rgba(18,23,43,0.08); color: var(--ink); }
+  .sender-email { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .snippet-text { color: var(--text-dim); font-size: 12.5px; margin-top: 3px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+
+  /* MODAL */
+  .modal-backdrop {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(18, 23, 43, 0.6); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+    padding: 20px; opacity: 0; pointer-events: none; transition: opacity .2s ease;
+  }
+  .modal-backdrop.active { opacity: 1; pointer-events: auto; }
+  .modal-box {
+    background: #fff; border: 1px solid var(--line); border-radius: 16px;
+    max-width: 650px; width: 100%; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+  }
+  .modal-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+  .modal-title { font-family: 'Space Grotesk', sans-serif; font-size: 20px; line-height: 1.3; }
+  .modal-body { font-size: 14px; line-height: 1.6; color: var(--ink); white-space: pre-wrap; margin-bottom: 20px; background: var(--paper); padding: 16px; border-radius: 8px; border: 1px solid var(--line); font-family: 'Inter', sans-serif; }
+  .modal-footer { display: flex; justify-content: flex-end; gap: 10px; }
+</style>
+</head>
+<body>
+
+<!-- NAVIGATION BAR -->
+
+<div class="wrap">
+  <header>
+    <h1>Mail &amp; Communication Console</h1>
+    <a href="admin_home.html" class="back-link">&larr; Back to Admin Home</a>
+  </header>
+
+  <!-- DIAGNOSTICS PANEL -->
+  <div class="diag warn" id="diagCard">
+    <div class="diag-head" onclick="toggleDiag()">
+      <span class="diag-title" id="diagHeadline">Checking Supabase Auth &amp; Google OAuth...</span>
+      <span style="color:var(--text-dim);" id="diagCaret">show details ▾</span>
+    </div>
+    <div class="diag-body" id="diagBody" hidden>
+      <div class="diag-row"><span class="diag-k">Supabase Client</span><span class="diag-v" id="dSupabase">Initialized</span></div>
+      <div class="diag-row"><span class="diag-k">OAuth Provider</span><span class="diag-v" id="dOAuth">Google OAuth 2.0 (Gmail Scope)</span></div>
+      <div class="diag-row"><span class="diag-k">Session Token</span><span class="diag-v" id="dToken">Local Cache / Demo Mode</span></div>
+      <div class="diag-row"><span class="diag-k">Gmail Endpoint</span><span class="diag-v" id="dEndpoint">https://gmail.googleapis.com/gmail/v1/users/me/messages</span></div>
+      <div class="diag-row"><span class="diag-k">Sync Status</span><span class="diag-v" id="dSync">Synchronized (Mock Data Loaded)</span></div>
+    </div>
+  </div>
+
+  <!-- SUMMARY OVERVIEW -->
+  <div class="summary-card">
+    <div class="summary-title">Mailbox Statistics</div>
+    <div class="totals-row">
+      <div class="total-stat-box">
+        <span class="total-stat-label">Total Emails</span>
+        <div class="total-stat-count" id="totalMailsCount">0</div>
+      </div>
+      <div class="total-stat-box">
+        <span class="total-stat-label">Unread Messages</span>
+        <div class="total-stat-unread" id="unreadMailsCount">0</div>
+      </div>
+      <div class="total-stat-box">
+        <span class="total-stat-label">Storage Allocated</span>
+        <div class="total-stat-storage" id="storageCount">1.4 GB / 15 GB</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FILTER CARD -->
+  <div class="filter-card">
+    <div class="filter-group">
+      <label for="folderFilter">Filter by Folder</label>
+      <select id="folderFilter" class="filter-control">
+        <option value="ALL">All Folders</option>
+        <option value="INBOX">Inbox</option>
+        <option value="SENT">Sent</option>
+        <option value="ARCHIVE">Archive</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label for="statusFilter">Read Status</label>
+      <select id="statusFilter" class="filter-control">
+        <option value="ALL">All Statuses</option>
+        <option value="UNREAD">Unread Only</option>
+        <option value="READ">Read Only</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label for="sortBy">Sort By</label>
+      <select id="sortBy" class="filter-control">
+        <option value="NEWEST">Newest First</option>
+        <option value="OLDEST">Oldest First</option>
+        <option value="SENDER">Sender Name (A-Z)</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label for="searchInput">Search Email</label>
+      <input type="text" id="searchInput" class="filter-control" placeholder="Search sender, subject, or content...">
+    </div>
+  </div>
+
+  <!-- ACTIONS BAR -->
+  <div class="actions-bar">
+    <div class="actions-left">
+      <button class="btn btn-primary" id="btnConnectGoogle">✦ Connect Google Account</button>
+      <button class="btn btn-outline" id="btnRefresh">↻ Refresh Mailbox</button>
+    </div>
+  </div>
+
+  <!-- RESULT BAR -->
+  <div class="result-bar" id="resultBar">
+    <div class="result-count" id="resultCount">Showing <b>0</b> emails</div>
+    <div class="result-meta">
+      <span class="read" id="resultRead">0 read</span>
+      <span class="unread" id="resultUnread">0 unread</span>
+      <button class="btn btn-outline btn-sm" id="btnResetFilters" hidden>✕ Clear filters</button>
+    </div>
+  </div>
+
+  <!-- EMAIL TABLE CARD -->
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Sender</th>
+          <th>Subject &amp; Snippet</th>
+          <th>Folder</th>
+          <th>Received</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="mailTableBody">
+        <tr><td colspan="6" style="text-align:center; padding:20px; color:var(--text-dim);">Loading emails...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- EMAIL VIEW MODAL -->
+<div class="modal-backdrop" id="emailModal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div>
+        <h2 class="modal-title" id="modalSubject">Email Subject</h2>
+        <span class="sender-email" id="modalSender">Sender Info</span>
+      </div>
+      <button class="btn btn-outline btn-sm" id="btnCloseModal">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody">Email body content...</div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="btnModalToggleRead">Mark Unread</button>
+      <button class="btn btn-primary" id="btnModalClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   SUPABASE CONFIGURATION & OAUTH SETUP
+   ===================================================================== */
+const SUPABASE_URL = "https://your-supabase-project.supabase.co"; // Replace with your URL
+const SUPABASE_ANON_KEY = "your-anon-key"; // Replace with your anon key
+
+let supabase = null;
+try {
+  if (typeof createClient !== 'undefined' && SUPABASE_URL.indexOf("your-supabase") === -1) {
+    supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }
+} catch (e) {
+  console.warn("Supabase not fully initialized. Operating in local mode.");
+}
+
+/* =====================================================================
+   MOCK / LOCAL DATA SEED
+   ===================================================================== */
+let rawEmails = [
+  {
+    id: "msg_101",
+    senderName: "Satwik Munjuluri",
+    senderEmail: "satwik@fks-cubing.org",
+    subject: "FKS Cubing Open 2026 Venue Layout & Timer Setup",
+    snippet: "Hey team, the speedstack timers and display screens have been organized for Stage A...",
+    body: "Hey team,\n\nThe speedstack timers and display screens have been organized for Stage A. We will need to test the Bluetooth connections to the live timing database on Friday evening.\n\nPlease verify that all competitor ID cards are printed correctly.\n\nBest,\nSatwik Munjuluri",
+    folder: "INBOX",
+    timestamp: Date.now() - 3600000 * 2, // 2 hours ago
+    isRead: false
+  },
+  {
+    id: "msg_102",
+    senderName: "World Cube Association",
+    senderEmail: "notifications@worldcubeassociation.org",
+    subject: "Delegate Approval Confirmation — FKS Cubing Open 2026",
+    snippet: "Your competition registration has been updated by the WCA Delegate. Official status: Approved...",
+    body: "Hello Organizer,\n\nYour competition registration has been updated by the WCA Delegate. Official status: Approved.\n\nAll registered competitors will now receive automatic email reminders 24 hours prior to the event.\n\nRegards,\nWCA Board",
+    folder: "INBOX",
+    timestamp: Date.now() - 3600000 * 18, // 18 hours ago
+    isRead: false
+  },
+  {
+    id: "msg_103",
+    senderName: "Kush M",
+    senderEmail: "kush@fks-cubing.org",
+    subject: "Payment Status Reconciliation Report",
+    snippet: "Attached is the latest spreadsheet of verified UPI payments for registered Grade 5-9 participants...",
+    body: "Hi Admin,\n\nAttached is the latest spreadsheet of verified UPI payments for registered Grade 5-9 participants. We have 12 pending payments that require manual mark-as-paid validation on the admin dashboard.\n\nThanks,\nKush",
+    folder: "INBOX",
+    timestamp: Date.now() - 3600000 * 42, // 1.7 days ago
+    isRead: true
+  },
+  {
+    id: "msg_104",
+    senderName: "Payment Gateway Service",
+    senderEmail: "no-reply@payments.com",
+    subject: "Weekly Settlement Statement — Oct 2026",
+    snippet: "Your settlement of ₹42,500 has been transferred to your registered bank account...",
+    body: "Dear Merchant,\n\nYour settlement of ₹42,500 has been transferred to your registered bank account ending in *8821.\n\nTransaction Reference: TXN998823114.\n\nThank you for using our gateway.",
+    folder: "ARCHIVE",
+    timestamp: Date.now() - 3600000 * 120, // 5 days ago
+    isRead: true
+  }
+];
+
+let activeMessageId = null;
+
+/* =====================================================================
+   DIAGNOSTICS & HELPERS
+   ===================================================================== */
+function toggleDiag() {
+  const b = document.getElementById("diagBody");
+  b.hidden = !b.hidden;
+  document.getElementById("diagCaret").textContent = b.hidden ? "show details ▾" : "hide details ▴";
+}
+
+function formatDate(ts) {
+  const d = new Date(ts);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ", " + 
+         d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
+function esc(s) {
+  const ESC = { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" };
+  return String(s || "").replace(/[&<>"']/g, c => ESC[c]);
+}
+
+/* =====================================================================
+   SUPABASE GOOGLE OAUTH FLOW
+   ===================================================================== */
+async function triggerGoogleLogin() {
+  if (!supabase) {
+    alert("Supabase integration demo mode: Configure SUPABASE_URL & SUPABASE_ANON_KEY to connect real Google Cloud credentials.");
+    return;
+  }
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        scopes: 'https://www.googleapis.com/auth/gmail.readonly',
+        queryParams: { access_type: 'offline', prompt: 'consent' },
+        redirectTo: window.location.origin + window.location.pathname
+      }
+    });
+    if (error) throw error;
+  } catch (err) {
+    alert("Google OAuth Error: " + err.message);
+  }
+}
+
+async function checkSession() {
+  if (!supabase) return;
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session && session.provider_token) {
+    document.getElementById("diagCard").className = "diag ok";
+    document.getElementById("diagHeadline").textContent = "Connected to Google Gmail API via Supabase!";
+    document.getElementById("dToken").textContent = "Active Token: " + session.provider_token.slice(0, 15) + "...";
+    fetchRealGmail(session.provider_token);
+  }
+}
+
+async function fetchRealGmail(token) {
+  try {
+    const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=5", {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await res.json();
+    if (data.messages) {
+      document.getElementById("dSync").textContent = `Fetched ${data.messages.length} live messages from Gmail API`;
+    }
+  } catch (err) {
+    console.error("Gmail API fetch error:", err);
+  }
+}
+
+/* =====================================================================
+   MAILBOX LOGIC & FILTERING
+   ===================================================================== */
+function updateSummary() {
+  const total = rawEmails.length;
+  const unread = rawEmails.filter(m => !m.isRead).length;
+
+  document.getElementById("totalMailsCount").textContent = total;
+  document.getElementById("unreadMailsCount").textContent = unread;
+}
+
+function applyFilters() {
+  const folder = document.getElementById("folderFilter").value;
+  const status = document.getElementById("statusFilter").value;
+  const sortBy = document.getElementById("sortBy").value;
+  const q = document.getElementById("searchInput").value.toLowerCase().trim();
+
+  let filtered = rawEmails.filter(email => {
+    const matchFolder = (folder === "ALL") || (email.folder === folder);
+    
+    let matchStatus = true;
+    if (status === "UNREAD") matchStatus = !email.isRead;
+    if (status === "READ") matchStatus = email.isRead;
+
+    const matchSearch = !q || 
+      email.senderName.toLowerCase().includes(q) ||
+      email.senderEmail.toLowerCase().includes(q) ||
+      email.subject.toLowerCase().includes(q) ||
+      email.snippet.toLowerCase().includes(q);
+
+    return matchFolder && matchStatus && matchSearch;
+  });
+
+  // Sorting
+  filtered.sort((a, b) => {
+    if (sortBy === "NEWEST") return b.timestamp - a.timestamp;
+    if (sortBy === "OLDEST") return a.timestamp - b.timestamp;
+    if (sortBy === "SENDER") return a.senderName.localeCompare(b.senderName);
+    return 0;
+  });
+
+  const activeFilters = folder !== "ALL" || status !== "ALL" || q !== "";
+  updateResultBar(filtered.length, activeFilters);
+  renderTable(filtered);
+}
+
+function updateResultBar(count, filtersActive) {
+  const readCount = rawEmails.filter(m => m.isRead).length;
+  const unreadCount = rawEmails.filter(m => !m.isRead).length;
+
+  document.getElementById("resultCount").innerHTML = filtersActive ? 
+    `Showing <b>${count}</b> emails <span style="color:var(--text-dim); font-size:13px;">(filtered)</span>` : 
+    `Showing all <b>${count}</b> emails`;
+  
+  document.getElementById("resultRead").textContent = readCount + " read";
+  document.getElementById("resultUnread").textContent = unreadCount + " unread";
+  document.getElementById("btnResetFilters").hidden = !filtersActive;
+}
+
+function renderTable(records) {
+  const tbody = document.getElementById("mailTableBody");
+  if (records.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:var(--text-dim);">No emails found matching criteria.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = records.map(mail => {
+    return `<tr class="${mail.isRead ? '' : 'unread-row'}">
+      <td>
+        <b>${esc(mail.senderName)}</b>
+        <span class="sender-email">${esc(mail.senderEmail)}</span>
+      </td>
+      <td>
+        <b>${esc(mail.subject)}</b>
+        <div class="snippet-text">${esc(mail.snippet)}</div>
+      </td>
+      <td><span class="badge badge-folder">${esc(mail.folder)}</span></td>
+      <td style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--text-dim);">${formatDate(mail.timestamp)}</td>
+      <td>
+        <span class="badge ${mail.isRead ? 'badge-read' : 'badge-unread'}">
+          ${mail.isRead ? 'Read' : 'Unread'}
+        </span>
+      </td>
+      <td>
+        <div style="display:flex; gap:6px;">
+          <button class="btn btn-primary btn-sm" onclick="openEmail('${mail.id}')">View</button>
+          <button class="btn btn-outline btn-sm" onclick="toggleReadState('${mail.id}')">
+            ${mail.isRead ? 'Mark Unread' : 'Mark Read'}
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+/* =====================================================================
+   INTERACTIONS & MODAL HANDLERS
+   ===================================================================== */
+function openEmail(id) {
+  const mail = rawEmails.find(m => m.id === id);
+  if (!mail) return;
+
+  activeMessageId = id;
+  mail.isRead = true; // Auto mark read on view
+  updateSummary();
+  applyFilters();
+
+  document.getElementById("modalSubject").textContent = mail.subject;
+  document.getElementById("modalSender").textContent = `From: ${mail.senderName} <${mail.senderEmail}> • ${formatDate(mail.timestamp)}`;
+  document.getElementById("modalBody").textContent = mail.body;
+  document.getElementById("btnModalToggleRead").textContent = mail.isRead ? "Mark as Unread" : "Mark as Read";
+  
+  document.getElementById("emailModal").classList.add("active");
+}
+
+function closeModal() {
+  document.getElementById("emailModal").classList.remove("active");
+  activeMessageId = null;
+}
+
+function toggleReadState(id) {
+  const mail = rawEmails.find(m => m.id === id);
+  if (mail) {
+    mail.isRead = !mail.isRead;
+    updateSummary();
+    applyFilters();
+  }
+}
+
+/* =====================================================================
+   INITIALIZATION & EVENT BINDING
+   ===================================================================== */
+document.addEventListener("DOMContentLoaded", () => {
+  ["folderFilter", "statusFilter", "sortBy"].forEach(id => {
+    document.getElementById(id).addEventListener("change", applyFilters);
+  });
+  
+  document.getElementById("searchInput").addEventListener("input", applyFilters);
+  
+  document.getElementById("btnResetFilters").addEventListener("click", () => {
+    document.getElementById("folderFilter").value = "ALL";
+    document.getElementById("statusFilter").value = "ALL";
+    document.getElementById("sortBy").value = "NEWEST";
+    document.getElementById("searchInput").value = "";
+    applyFilters();
+  });
+
+  document.getElementById("btnRefresh").addEventListener("click", () => {
+    document.getElementById("diagCard").className = "diag ok";
+    document.getElementById("diagHeadline").textContent = "Mailbox synchronized successfully.";
+    updateSummary();
+    applyFilters();
+  });
+
+  document.getElementById("btnConnectGoogle").addEventListener("click", triggerGoogleLogin);
+  document.getElementById("btnCloseModal").addEventListener("click", closeModal);
+  document.getElementById("btnModalClose").addEventListener("click", closeModal);
+  
+  document.getElementById("btnModalToggleRead").addEventListener("click", () => {
+    if (activeMessageId) {
+      toggleReadState(activeMessageId);
+      closeModal();
+    }
+  });
+
+  updateSummary();
+  applyFilters();
+  checkSession();
+});
+</script>
+</body>
+</html>
