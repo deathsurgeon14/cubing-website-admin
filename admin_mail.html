@@ -302,11 +302,11 @@
 const SUPABASE_URL = "https://pinxocrtncqcftquogdp.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable__efRed0WHG0Ee2twwSFyOA_ujIzQdEW";
 
-let supabase = null;
+let supabaseClient = null;
 try {
-  // Correctly access createClient from the global window.supabase UMD object
+  // Use supabaseClient to avoid colliding with the global library variable
   if (window.supabase && typeof window.supabase.createClient === 'function') {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }
 } catch (e) {
   console.warn("Supabase not fully initialized.", e);
@@ -340,12 +340,12 @@ function esc(s) {
    SUPABASE GOOGLE OAUTH & GMAIL API FETCHING
    ===================================================================== */
 async function triggerGoogleLogin() {
-  if (!supabase) {
+  if (!supabaseClient) {
     alert("Supabase client is not initialized.");
     return;
   }
   try {
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { error } = await supabaseClient.auth.signInWithOAuth({
       provider: 'google',
       options: {
         scopes: 'https://www.googleapis.com/auth/gmail.readonly',
@@ -360,8 +360,8 @@ async function triggerGoogleLogin() {
 }
 
 async function checkSession() {
-  if (!supabase) return;
-  const { data: { session } } = await supabase.auth.getSession();
+  if (!supabaseClient) return;
+  const { data: { session } } = await supabaseClient.auth.getSession();
   if (session && session.provider_token) {
     document.getElementById("diagCard").className = "diag ok";
     document.getElementById("diagHeadline").textContent = "Connected to Google Gmail API via Supabase!";
@@ -577,7 +577,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.getElementById("btnRefresh").addEventListener("click", async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await supabaseClient.auth.getSession();
     if (session && session.provider_token) {
       fetchLiveGmailInbox(session.provider_token);
     } else {
