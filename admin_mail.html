@@ -391,7 +391,8 @@ async function fetchLiveGmailInbox(token) {
 
     const detailedMessages = await Promise.all(
       data.messages.map(async (msg) => {
-        const detailRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`, { headers: { Authorization: `Bearer ${token}` }
+        const detailRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`, {
+          headers: { Authorization: `Bearer ${token}` }
         });
         return await detailRes.json();
       })
@@ -505,4 +506,100 @@ function renderTable(records) {
         <div class="snippet-text">${esc(mail.snippet)}</div>
       </td>
       <td><span class="badge badge-folder">${esc(mail.folder)}</span></td>
-      <td style="font-family:'
+      <td style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--text-dim);">${formatDate(mail.timestamp)}</td>
+      <td>
+        <span class="badge ${mail.isRead ? 'badge-read' : 'badge-unread'}">
+          ${mail.isRead ? 'Read' : 'Unread'}
+        </span>
+      </td>
+      <td>
+        <div style="display:flex; gap:6px;">
+          <button class="btn btn-primary btn-sm" onclick="openEmail('${mail.id}')">View</button>
+          <button class="btn btn-outline btn-sm" onclick="toggleReadState('${mail.id}')">
+            ${mail.isRead ? 'Mark Unread' : 'Mark Read'}
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+/* =====================================================================
+   INTERACTIONS & MODAL HANDLERS
+   ===================================================================== */
+function openEmail(id) {
+  const mail = rawEmails.find(m => m.id === id);
+  if (!mail) return;
+
+  activeMessageId = id;
+  mail.isRead = true;
+  updateSummary();
+  applyFilters();
+
+  document.getElementById("modalSubject").textContent = mail.subject;
+  document.getElementById("modalSender").textContent = `From: ${mail.senderName} <${mail.senderEmail}> • ${formatDate(mail.timestamp)}`;
+  document.getElementById("modalBody").textContent = mail.body;
+  document.getElementById("btnModalToggleRead").textContent = mail.isRead ? "Mark as Unread" : "Mark as Read";
+  
+  document.getElementById("emailModal").classList.add("active");
+}
+
+function closeModal() {
+  document.getElementById("emailModal").classList.remove("active");
+  activeMessageId = null;
+}
+
+function toggleReadState(id) {
+  const mail = rawEmails.find(m => m.id === id);
+  if (mail) {
+    mail.isRead = !mail.isRead;
+    updateSummary();
+    applyFilters();
+  }
+}
+
+/* =====================================================================
+   INITIALIZATION & EVENT BINDING
+   ===================================================================== */
+document.addEventListener("DOMContentLoaded", () => {
+  ["folderFilter", "statusFilter", "sortBy"].forEach(id => {
+    document.getElementById(id).addEventListener("change", applyFilters);
+  });
+  
+  document.getElementById("searchInput").addEventListener("input", applyFilters);
+  
+  document.getElementById("btnResetFilters").addEventListener("click", () => {
+    document.getElementById("folderFilter").value = "ALL";
+    document.getElementById("statusFilter").value = "ALL";
+    document.getElementById("sortBy").value = "NEWEST";
+    document.getElementById("searchInput").value = "";
+    applyFilters();
+  });
+
+  document.getElementById("btnRefresh").addEventListener("click", async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session && session.provider_token) {
+      fetchLiveGmailInbox(session.provider_token);
+    } else {
+      alert("Please connect your Google account first.");
+    }
+  });
+
+  document.getElementById("btnConnectGoogle").addEventListener("click", triggerGoogleLogin);
+  document.getElementById("btnCloseModal").addEventListener("click", closeModal);
+  document.getElementById("btnModalClose").addEventListener("click", closeModal);
+  
+  document.getElementById("btnModalToggleRead").addEventListener("click", () => {
+    if (activeMessageId) {
+      toggleReadState(activeMessageId);
+      closeModal();
+    }
+  });
+
+  updateSummary();
+  applyFilters();
+  checkSession();
+});
+</script>
+</body>
+</html>
