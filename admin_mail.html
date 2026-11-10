@@ -6,7 +6,7 @@
 <title>Admin — Mail Console (FKS Cubing Open 2026)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<!-- Supabase JS Client for seamless OAuth handling -->
+<!-- Supabase JS Client CDN -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
@@ -30,7 +30,7 @@
   }
   a { color: inherit; text-decoration: none; }
 
-  /* NAVIGATION BAR (Matches login.html) */
+  /* NAVIGATION BAR */
   nav {
     position: sticky; top: 0; z-index: 50;
     background: rgba(246,244,239,0.95);
@@ -50,12 +50,6 @@
     display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 700;
     font-family: 'IBM Plex Mono', monospace;
   }
-  .nav-links { display: flex; align-items: center; gap: 24px; font-size: 14px; font-weight: 500; }
-  .nav-links .active { position: relative; font-weight: 600; }
-  .nav-links .active::after {
-    content: ""; position: absolute; left: 0; right: 0; bottom: -20px; height: 2px; background: var(--ink);
-  }
-  .nav-cta { display: flex; gap: 10px; align-items: center; }
 
   /* BUTTON STYLES */
   .btn {
@@ -68,10 +62,6 @@
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-primary { background: var(--ink); color: var(--paper); }
   .btn-primary:hover { box-shadow: 0 4px 12px rgba(18,23,43,0.25); }
-  .btn-solid-red { background: var(--cube-red); color: #fff; }
-  .btn-solid-red:hover { box-shadow: 0 4px 12px rgba(230,64,42,0.3); }
-  .btn-green { background: var(--cube-green); color: #fff; }
-  .btn-amber { background: var(--cube-amber); color: #fff; }
   .btn-outline { border-color: var(--line); background: #fff; color: var(--ink); }
   .btn-outline:hover { border-color: var(--ink); }
   .btn-sm { padding: 4px 10px; font-size: 11px; border-radius: 6px; }
@@ -176,8 +166,6 @@
 </head>
 <body>
 
-<!-- NAVIGATION BAR -->
-
 <div class="wrap">
   <header>
     <h1>Mail &amp; Communication Console</h1>
@@ -195,7 +183,7 @@
       <div class="diag-row"><span class="diag-k">OAuth Provider</span><span class="diag-v" id="dOAuth">Google OAuth 2.0 (Gmail Scope)</span></div>
       <div class="diag-row"><span class="diag-k">Session Token</span><span class="diag-v" id="dToken">Local Cache / Demo Mode</span></div>
       <div class="diag-row"><span class="diag-k">Gmail Endpoint</span><span class="diag-v" id="dEndpoint">https://gmail.googleapis.com/gmail/v1/users/me/messages</span></div>
-      <div class="diag-row"><span class="diag-k">Sync Status</span><span class="diag-v" id="dSync">Synchronized (Mock Data Loaded)</span></div>
+      <div class="diag-row"><span class="diag-k">Sync Status</span><span class="diag-v" id="dSync">Synchronized (Pending Google Auth)</span></div>
     </div>
   </div>
 
@@ -316,11 +304,12 @@ const SUPABASE_ANON_KEY = "sb_publishable__efRed0WHG0Ee2twwSFyOA_ujIzQdEW";
 
 let supabase = null;
 try {
-  if (typeof createClient !== 'undefined' && SUPABASE_URL.indexOf("your-supabase") === -1) {
-    supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // Correctly access createClient from the global window.supabase UMD object
+  if (window.supabase && typeof window.supabase.createClient === 'function') {
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }
 } catch (e) {
-  console.warn("Supabase not fully initialized.");
+  console.warn("Supabase not fully initialized.", e);
 }
 
 // Live emails array (populated dynamically from Gmail API)
@@ -352,7 +341,7 @@ function esc(s) {
    ===================================================================== */
 async function triggerGoogleLogin() {
   if (!supabase) {
-    alert("Please update SUPABASE_URL and SUPABASE_ANON_KEY first.");
+    alert("Supabase client is not initialized.");
     return;
   }
   try {
@@ -402,8 +391,7 @@ async function fetchLiveGmailInbox(token) {
 
     const detailedMessages = await Promise.all(
       data.messages.map(async (msg) => {
-        const detailRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`, {
-          headers: { Authorization: `Bearer ${token}` }
+        const detailRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`, { headers: { Authorization: `Bearer ${token}` }
         });
         return await detailRes.json();
       })
@@ -502,7 +490,7 @@ function updateResultBar(count, filtersActive) {
 function renderTable(records) {
   const tbody = document.getElementById("mailTableBody");
   if (records.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:var(--text-dim);">No emails found matching criteria. Connect your Google account if you haven\'t yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:var(--text-dim);">No emails found. Click "Connect Google Account" to load your inbox.</td></tr>';
     return;
   }
 
@@ -517,100 +505,4 @@ function renderTable(records) {
         <div class="snippet-text">${esc(mail.snippet)}</div>
       </td>
       <td><span class="badge badge-folder">${esc(mail.folder)}</span></td>
-      <td style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--text-dim);">${formatDate(mail.timestamp)}</td>
-      <td>
-        <span class="badge ${mail.isRead ? 'badge-read' : 'badge-unread'}">
-          ${mail.isRead ? 'Read' : 'Unread'}
-        </span>
-      </td>
-      <td>
-        <div style="display:flex; gap:6px;">
-          <button class="btn btn-primary btn-sm" onclick="openEmail('${mail.id}')">View</button>
-          <button class="btn btn-outline btn-sm" onclick="toggleReadState('${mail.id}')">
-            ${mail.isRead ? 'Mark Unread' : 'Mark Read'}
-          </button>
-        </div>
-      </td>
-    </tr>`;
-  }).join("");
-}
-
-/* =====================================================================
-   INTERACTIONS & MODAL HANDLERS
-   ===================================================================== */
-function openEmail(id) {
-  const mail = rawEmails.find(m => m.id === id);
-  if (!mail) return;
-
-  activeMessageId = id;
-  mail.isRead = true;
-  updateSummary();
-  applyFilters();
-
-  document.getElementById("modalSubject").textContent = mail.subject;
-  document.getElementById("modalSender").textContent = `From: ${mail.senderName} <${mail.senderEmail}> • ${formatDate(mail.timestamp)}`;
-  document.getElementById("modalBody").textContent = mail.body;
-  document.getElementById("btnModalToggleRead").textContent = mail.isRead ? "Mark as Unread" : "Mark as Read";
-  
-  document.getElementById("emailModal").classList.add("active");
-}
-
-function closeModal() {
-  document.getElementById("emailModal").classList.remove("active");
-  activeMessageId = null;
-}
-
-function toggleReadState(id) {
-  const mail = rawEmails.find(m => m.id === id);
-  if (mail) {
-    mail.isRead = !mail.isRead;
-    updateSummary();
-    applyFilters();
-  }
-}
-
-/* =====================================================================
-   INITIALIZATION & EVENT BINDING
-   ===================================================================== */
-document.addEventListener("DOMContentLoaded", () => {
-  ["folderFilter", "statusFilter", "sortBy"].forEach(id => {
-    document.getElementById(id).addEventListener("change", applyFilters);
-  });
-  
-  document.getElementById("searchInput").addEventListener("input", applyFilters);
-  
-  document.getElementById("btnResetFilters").addEventListener("click", () => {
-    document.getElementById("folderFilter").value = "ALL";
-    document.getElementById("statusFilter").value = "ALL";
-    document.getElementById("sortBy").value = "NEWEST";
-    document.getElementById("searchInput").value = "";
-    applyFilters();
-  });
-
-  document.getElementById("btnRefresh").addEventListener("click", async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session && session.provider_token) {
-      fetchLiveGmailInbox(session.provider_token);
-    } else {
-      alert("Please connect your Google account first.");
-    }
-  });
-
-  document.getElementById("btnConnectGoogle").addEventListener("click", triggerGoogleLogin);
-  document.getElementById("btnCloseModal").addEventListener("click", closeModal);
-  document.getElementById("btnModalClose").addEventListener("click", closeModal);
-  
-  document.getElementById("btnModalToggleRead").addEventListener("click", () => {
-    if (activeMessageId) {
-      toggleReadState(activeMessageId);
-      closeModal();
-    }
-  });
-
-  updateSummary();
-  applyFilters();
-  checkSession();
-});
-</script>
-</body>
-</html>
+      <td style="font-family:'
