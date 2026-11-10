@@ -311,8 +311,12 @@
 /* =====================================================================
    SUPABASE CONFIGURATION & OAUTH SETUP
    ===================================================================== */
-const SUPABASE_URL = "https://your-supabase-project.supabase.co"; // Replace with your URL
-const SUPABASE_ANON_KEY = "your-anon-key"; // Replace with your anon key
+const SUPABASE_URL = "https://pinxocrtncqcftquogdp.supabase.co"; // Replace with your URL
+const SUPABASE_ANON_KEY = "sb_publishable__efRed0WHG0Ee2twwSFyOA_ujIzQdEW"; // Replace with your anon key
+
+/* =====================================================================
+   SUPABASE CONFIGURATION & OAUTH SETUP
+   ===================================================================== */
 
 let supabase = null;
 try {
@@ -320,59 +324,11 @@ try {
     supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }
 } catch (e) {
-  console.warn("Supabase not fully initialized. Operating in local mode.");
+  console.warn("Supabase not fully initialized.");
 }
 
-/* =====================================================================
-   MOCK / LOCAL DATA SEED
-   ===================================================================== */
-let rawEmails = [
-  {
-    id: "msg_101",
-    senderName: "Satwik Munjuluri",
-    senderEmail: "satwik@fks-cubing.org",
-    subject: "FKS Cubing Open 2026 Venue Layout & Timer Setup",
-    snippet: "Hey team, the speedstack timers and display screens have been organized for Stage A...",
-    body: "Hey team,\n\nThe speedstack timers and display screens have been organized for Stage A. We will need to test the Bluetooth connections to the live timing database on Friday evening.\n\nPlease verify that all competitor ID cards are printed correctly.\n\nBest,\nSatwik Munjuluri",
-    folder: "INBOX",
-    timestamp: Date.now() - 3600000 * 2, // 2 hours ago
-    isRead: false
-  },
-  {
-    id: "msg_102",
-    senderName: "World Cube Association",
-    senderEmail: "notifications@worldcubeassociation.org",
-    subject: "Delegate Approval Confirmation — FKS Cubing Open 2026",
-    snippet: "Your competition registration has been updated by the WCA Delegate. Official status: Approved...",
-    body: "Hello Organizer,\n\nYour competition registration has been updated by the WCA Delegate. Official status: Approved.\n\nAll registered competitors will now receive automatic email reminders 24 hours prior to the event.\n\nRegards,\nWCA Board",
-    folder: "INBOX",
-    timestamp: Date.now() - 3600000 * 18, // 18 hours ago
-    isRead: false
-  },
-  {
-    id: "msg_103",
-    senderName: "Kush M",
-    senderEmail: "kush@fks-cubing.org",
-    subject: "Payment Status Reconciliation Report",
-    snippet: "Attached is the latest spreadsheet of verified UPI payments for registered Grade 5-9 participants...",
-    body: "Hi Admin,\n\nAttached is the latest spreadsheet of verified UPI payments for registered Grade 5-9 participants. We have 12 pending payments that require manual mark-as-paid validation on the admin dashboard.\n\nThanks,\nKush",
-    folder: "INBOX",
-    timestamp: Date.now() - 3600000 * 42, // 1.7 days ago
-    isRead: true
-  },
-  {
-    id: "msg_104",
-    senderName: "Payment Gateway Service",
-    senderEmail: "no-reply@payments.com",
-    subject: "Weekly Settlement Statement — Oct 2026",
-    snippet: "Your settlement of ₹42,500 has been transferred to your registered bank account...",
-    body: "Dear Merchant,\n\nYour settlement of ₹42,500 has been transferred to your registered bank account ending in *8821.\n\nTransaction Reference: TXN998823114.\n\nThank you for using our gateway.",
-    folder: "ARCHIVE",
-    timestamp: Date.now() - 3600000 * 120, // 5 days ago
-    isRead: true
-  }
-];
-
+// Live emails array (populated dynamically from Gmail API)
+let rawEmails = [];
 let activeMessageId = null;
 
 /* =====================================================================
@@ -396,15 +352,15 @@ function esc(s) {
 }
 
 /* =====================================================================
-   SUPABASE GOOGLE OAUTH FLOW
+   SUPABASE GOOGLE OAUTH & GMAIL API FETCHING
    ===================================================================== */
 async function triggerGoogleLogin() {
   if (!supabase) {
-    alert("Supabase integration demo mode: Configure SUPABASE_URL & SUPABASE_ANON_KEY to connect real Google Cloud credentials.");
+    alert("Please update SUPABASE_URL and SUPABASE_ANON_KEY first.");
     return;
   }
   try {
-    const { data, error } = await supabase.auth.signInWithOAuth({
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         scopes: 'https://www.googleapis.com/auth/gmail.readonly',
@@ -425,21 +381,67 @@ async function checkSession() {
     document.getElementById("diagCard").className = "diag ok";
     document.getElementById("diagHeadline").textContent = "Connected to Google Gmail API via Supabase!";
     document.getElementById("dToken").textContent = "Active Token: " + session.provider_token.slice(0, 15) + "...";
-    fetchRealGmail(session.provider_token);
+    fetchLiveGmailInbox(session.provider_token);
   }
 }
 
-async function fetchRealGmail(token) {
+async function fetchLiveGmailInbox(token) {
   try {
-    const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=5", {
+    document.getElementById("diagCard").className = "diag warn";
+    document.getElementById("diagHeadline").textContent = "Fetching live messages from Gmail API...";
+
+    const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=20", {
       headers: { Authorization: `Bearer ${token}` }
     });
+    
+    if (!res.ok) throw new Error("Failed to fetch message list from Gmail API");
+    
     const data = await res.json();
-    if (data.messages) {
-      document.getElementById("dSync").textContent = `Fetched ${data.messages.length} live messages from Gmail API`;
+    if (!data.messages || data.messages.length === 0) {
+      rawEmails = [];
+      updateSummary();
+      applyFilters();
+      return;
     }
+
+    const detailedMessages = await Promise.all(
+      data.messages.map(async (msg) => {
+        const detailRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        return await detailRes.json();
+      })
+    );
+
+    rawEmails = detailedMessages.map(msg => {
+      const headers = msg.payload?.headers || [];
+      const getHeader = name => headers.find(h => h.name.toLowerCase() === name.toLowerCase())?.value || "";
+      
+      const rawFrom = getHeader("From");
+      const senderMatch = rawFrom.match(/(.*?)\s*<(.+?)>/) || [null, rawFrom, rawFrom];
+
+      return {
+        id: msg.id,
+        senderName: (senderMatch[1] || senderMatch[2]).replace(/"/g, "").trim(),
+        senderEmail: senderMatch[2] || rawFrom,
+        subject: getHeader("Subject") || "(No Subject)",
+        snippet: msg.snippet || "",
+        body: msg.snippet,
+        folder: "INBOX",
+        timestamp: parseInt(msg.internalDate) || Date.now(),
+        isRead: !msg.labelIds?.includes("UNREAD")
+      };
+    });
+
+    document.getElementById("diagCard").className = "diag ok";
+    document.getElementById("diagHeadline").textContent = `Successfully synced ${rawEmails.length} live messages from Gmail.`;
+    updateSummary();
+    applyFilters();
+
   } catch (err) {
-    console.error("Gmail API fetch error:", err);
+    console.error("Gmail sync error:", err);
+    document.getElementById("diagCard").className = "diag fail";
+    document.getElementById("diagHeadline").textContent = "Error syncing Gmail: " + err.message;
   }
 }
 
@@ -476,7 +478,6 @@ function applyFilters() {
     return matchFolder && matchStatus && matchSearch;
   });
 
-  // Sorting
   filtered.sort((a, b) => {
     if (sortBy === "NEWEST") return b.timestamp - a.timestamp;
     if (sortBy === "OLDEST") return a.timestamp - b.timestamp;
@@ -505,7 +506,7 @@ function updateResultBar(count, filtersActive) {
 function renderTable(records) {
   const tbody = document.getElementById("mailTableBody");
   if (records.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:var(--text-dim);">No emails found matching criteria.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:var(--text-dim);">No emails found matching criteria. Connect your Google account if you haven\'t yet.</td></tr>';
     return;
   }
 
@@ -546,7 +547,7 @@ function openEmail(id) {
   if (!mail) return;
 
   activeMessageId = id;
-  mail.isRead = true; // Auto mark read on view
+  mail.isRead = true;
   updateSummary();
   applyFilters();
 
@@ -590,11 +591,13 @@ document.addEventListener("DOMContentLoaded", () => {
     applyFilters();
   });
 
-  document.getElementById("btnRefresh").addEventListener("click", () => {
-    document.getElementById("diagCard").className = "diag ok";
-    document.getElementById("diagHeadline").textContent = "Mailbox synchronized successfully.";
-    updateSummary();
-    applyFilters();
+  document.getElementById("btnRefresh").addEventListener("click", async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session && session.provider_token) {
+      fetchLiveGmailInbox(session.provider_token);
+    } else {
+      alert("Please connect your Google account first.");
+    }
   });
 
   document.getElementById("btnConnectGoogle").addEventListener("click", triggerGoogleLogin);
